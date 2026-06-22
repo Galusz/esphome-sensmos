@@ -1,4 +1,4 @@
-# esphome-sensmos
+# sensmos-esphome
 
 Publish any ESPHome sensor to the **[Sensmos](https://sensmos.com)** live map — no wallet, no signup, no firmware flashing. Add a few lines, pick a passkey, done.
 
@@ -14,7 +14,7 @@ It never touches the GALU economy — software nodes are data + map only.
 
 ```yaml
 external_components:
-  - source: github://Galusz/esphome-sensmos@main
+  - source: github://Galusz/sensmos-esphome@main
 ```
 
 ## Configure
@@ -55,7 +55,7 @@ Drop-in on top of [syssi/esphome-jk-bms](https://github.com/syssi/esphome-jk-bms
 ```yaml
 external_components:
   - source: github://syssi/esphome-jk-bms@main
-  - source: github://Galusz/esphome-sensmos@main
+  - source: github://Galusz/sensmos-esphome@main
 
 sensor:
   - platform: jk_bms_ble
