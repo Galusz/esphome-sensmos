@@ -1,7 +1,8 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor
+from esphome.components import sensor, esp32
 from esphome.const import CONF_ID
+from esphome.core import CORE
 
 CODEOWNERS = ["@Galusz"]
 DEPENDENCIES = ["network"]
@@ -51,3 +52,9 @@ async def to_code(config):
     for item in config[CONF_SENSORS]:
         s = await cg.get_variable(item[CONF_ID])
         cg.add(var.add_sensor(s, item[CONF_ENTITY]))
+
+    # ESP-IDF: esp_http_client jest domyślnie wykluczony z buildu — włącz go,
+    # oraz cert bundle (dla HTTPS przez esp_crt_bundle_attach). Na arduino nieużywane.
+    if CORE.is_esp32 and CORE.using_esp_idf:
+        esp32.include_builtin_idf_component("esp_http_client")
+        esp32.add_idf_sdkconfig_option("CONFIG_MBEDTLS_CERTIFICATE_BUNDLE", True)
