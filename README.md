@@ -120,12 +120,30 @@ sensmos_key: "paste-your-48-char-passkey-here-xxxxxxxxxxxx"
 
 > Got a battery/BMS, solar inverter, weather station…? Same pattern — give the sensors an `id:` and map them to `pub.batt_soc`, `pub.pv_power`, `pub.temp_out`, etc.
 
+## Read another node's data (preview)
+
+The other direction: pull a value another node publishes and expose it as a normal ESPHome sensor — show a neighbour's air quality on a local display, drive an automation, whatever. It's a **preview, not realtime**: it polls the public map data on a long interval (default 5 min). No wallet, no subscription.
+
+```yaml
+external_components:
+  - source: github://Galusz/sensmos-esphome@main
+
+sensor:
+  - platform: sensmos
+    name: "Neighbour PM2.5"
+    node: "0123…64-hex…cdef"   # the target node's device id (map → node popup → copy)
+    entity: pub.pm25            # which published entity to read
+    update_interval: 5min       # how often to poll (keep it long — it's a preview)
+```
+
+Each `- platform: sensmos` entry = one remote entity → one ESPHome sensor. Add more entries (same or different `node`) for more values. Works for any node, real or software. The fetch runs off the main loop, so it won't stall BLE.
+
 ## Notes
 
 - **Frameworks:** works on both `esp-idf` (uses the cert bundle) and `arduino`.
 - **Timeout / pruning:** a software node goes offline after 48 h without a push and reappears automatically on the next one. Online/offline status is shown on the map.
 - **Up to 50 entities** per node.
-- The push is a short blocking HTTPS call on the update interval — keep `update_interval` ≥ 60 s if your device also does time-sensitive work (e.g. BLE).
+- **Non-blocking:** both publish (POST) and read (GET) run the HTTPS call in a separate FreeRTOS task, so they don't stall the main loop or BLE. Still, keep intervals sane (publish ≥ 60 s, read ≥ a few min).
 
 ## Part of the Sensmos project
 
