@@ -1,14 +1,14 @@
-# sensmos-esphome
+<img src="logo.png" alt="Sensmos" height="80">
 
-Publish any ESPHome sensor to the **[Sensmos](https://sensmos.com)** live map — no wallet, no signup, no firmware flashing. Add a few lines, pick a passkey, done.
+# Sensmos — ESPHome
 
-Your device shows up as a **software node** (purple) on [sensmos.com/map](https://sensmos.com/map/): values, history, charts and an optional heatmap layer.
+**Publish any ESPHome sensor to the [Sensmos](https://sensmos.com) live map — no wallet, no signup, no firmware to write. Add a few lines, pick a passkey, done.**
+
+> Your device shows up as a **software node** (purple) on [sensmos.com/map](https://sensmos.com/map/): live values, history, charts and an optional heatmap layer. It never touches the GALU economy — software nodes are data + map only.
 
 ## How it works
 
-You add a `sensmos:` block with a **passkey** and a list of `sensor id → entity name` mappings. Every `update_interval` the component reads those sensors and POSTs them to the Sensmos ingest endpoint over HTTPS. The first push auto-registers your node (identity = `sha256(key)`), later pushes overwrite. Location comes from the optional `lat`/`lon` or is resolved from your IP (GeoIP).
-
-It never touches the GALU economy — software nodes are data + map only.
+You add a `sensmos:` block with a **passkey** and a list of `sensor id → entity name` mappings. Every `update_interval` the component reads those sensors and POSTs them to the Sensmos ingest endpoint over HTTPS. The first push auto-registers your node (identity = `sha256(key)`), later pushes overwrite. Location comes from the optional `lat`/`lon`, or is resolved from your IP (GeoIP).
 
 ## Install
 
@@ -95,6 +95,16 @@ sensmos_key: "paste-your-48-char-passkey-here-xxxxxxxxxxxx"
 - **Up to 50 entities** per node.
 - The push is a short blocking HTTPS call on the update interval — keep `update_interval` ≥ 60 s if your device also does time-sensitive work (e.g. BLE).
 
----
+## Part of the Sensmos project
 
-Part of the **Sensmos** project · [sensmos.com](https://sensmos.com) · [map](https://sensmos.com/map/) · [whitepaper](https://github.com/Galusz/sensmos-protocol/blob/main/WHITEPAPER.md)
+| | |
+|---|---|
+| 🌐 Website | https://sensmos.com |
+| 🗺️ Live map | https://sensmos.com/map/ |
+| 📱 App | https://github.com/Galusz/sensmos-app |
+| 🔌 Firmware | https://github.com/Galusz/sensmos-firmware |
+| 🏠 Home Assistant | https://github.com/Galusz/sensmos-homeassistant |
+| 📜 Protocol | https://github.com/Galusz/sensmos-protocol |
+| 💬 Discord | https://discord.gg/ukea386Kqx |
+
+GALU runs on Polygon. © 2026 Sensmos.
