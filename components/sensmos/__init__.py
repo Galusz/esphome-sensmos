@@ -53,8 +53,9 @@ async def to_code(config):
         s = await cg.get_variable(item[CONF_ID])
         cg.add(var.add_sensor(s, item[CONF_ENTITY]))
 
-    # ESP-IDF: esp_http_client jest domyślnie wykluczony z buildu — włącz go,
-    # oraz cert bundle (dla HTTPS przez esp_crt_bundle_attach). Na arduino nieużywane.
-    if CORE.is_esp32 and CORE.using_esp_idf:
+    # ESP32: esp_http_client jest domyślnie wykluczony z buildu — włącz go,
+    # oraz cert bundle (HTTPS przez esp_crt_bundle_attach). Dotyczy obu frameworków
+    # (arduino-esp32 też stoi na ESP-IDF); na arduino i tak używamy HTTPClient.
+    if CORE.is_esp32:
         esp32.include_builtin_idf_component("esp_http_client")
         esp32.add_idf_sdkconfig_option("CONFIG_MBEDTLS_CERTIFICATE_BUNDLE", True)

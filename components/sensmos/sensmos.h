@@ -28,9 +28,14 @@ class SensmosComponent : public PollingComponent {
   void dump_config() override;
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
 
+  // wołane z taska wysyłki: zapis wyniku + zwolnienie (logujemy w pętli, nie w tasku)
+  void finish(int code) {
+    this->last_status_ = code;
+    this->busy_ = false;
+  }
+
  protected:
   std::string build_payload_();
-  void post_(const std::string &body);
 
   std::string key_;
   std::string label_;
@@ -38,6 +43,8 @@ class SensmosComponent : public PollingComponent {
   float lon_{0.0f};
   bool has_loc_{false};
   std::vector<std::pair<sensor::Sensor *, std::string>> sensors_;
+  volatile bool busy_{false};      // POST trwa w osobnym tasku → nie startuj kolejnego
+  volatile int last_status_{0};    // wynik ostatniego POST (logowany w update())
 };
 
 }  // namespace sensmos

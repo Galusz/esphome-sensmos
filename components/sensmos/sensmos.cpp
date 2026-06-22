@@ -3,6 +3,8 @@
 #include "esphome/components/network/util.h"
 #include <cmath>
 #include <cstdio>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #ifdef USE_ESP_IDF
 #include "esp_http_client.h"
@@ -18,6 +20,52 @@ namespace sensmos {
 
 static const char *const TAG = "sensmos";
 static const char *const INGEST_URL = "https://api.sensmos.com/v1/ingest";
+
+// Blokujący POST — uruchamiany w OSOBNYM tasku (nie w pętli), żeby HTTPS nie dławił
+// głównej pętli/BLE. Bez logowania tutaj — logger ESPHome nie jest thread-safe; wynik
+// wraca przez finish() i jest logowany w update().
+static int sensmos_http_post(const std::string &body) {
+#ifdef USE_ESP_IDF
+  esp_http_client_config_t cfg = {};
+  cfg.url = INGEST_URL;
+  cfg.method = HTTP_METHOD_POST;
+  cfg.timeout_ms = 8000;
+  cfg.crt_bundle_attach = esp_crt_bundle_attach;
+  esp_http_client_handle_t client = esp_http_client_init(&cfg);
+  esp_http_client_set_header(client, "Content-Type", "application/json");
+  esp_http_client_set_post_field(client, body.c_str(), body.size());
+  esp_err_t err = esp_http_client_perform(client);
+  int code = (err == ESP_OK) ? esp_http_client_get_status_code(client) : -1;
+  esp_http_client_cleanup(client);
+  return code;
+#elif defined(USE_ARDUINO)
+  WiFiClientSecure client;
+  client.setInsecure();  // v1: bez weryfikacji certu (dane telemetryczne, niski risk)
+  HTTPClient http;
+  if (!http.begin(client, INGEST_URL))
+    return -1;
+  http.setTimeout(8000);
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST((uint8_t *) body.c_str(), body.size());
+  http.end();
+  return code;
+#else
+  return -1;
+#endif
+}
+
+struct PostJob {
+  SensmosComponent *self;
+  std::string body;
+};
+
+static void sensmos_post_task(void *arg) {
+  PostJob *job = static_cast<PostJob *>(arg);
+  int code = sensmos_http_post(job->body);
+  job->self->finish(code);
+  delete job;
+  vTaskDelete(nullptr);
+}
 
 void SensmosComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Sensmos:");
@@ -51,7 +99,7 @@ std::string SensmosComponent::build_payload_() {
     char val[32];
     snprintf(val, sizeof(val), "%.4f", s->state);
     j += "{\"entity_id\":\"" + p.second + "\",\"value\":\"" + val + "\"";
-    std::string unit = s->get_unit_of_measurement();
+    const std::string &unit = s->get_unit_of_measurement_ref();
     if (!unit.empty())
       j += ",\"unit\":\"" + unit + "\"";
     j += "}";
@@ -61,46 +109,32 @@ std::string SensmosComponent::build_payload_() {
 }
 
 void SensmosComponent::update() {
+  // wynik poprzedniej wysyłki (z taska) — logujemy tu, w pętli
+  if (this->last_status_ != 0) {
+    ESP_LOGD(TAG, "Ingest HTTP %d", this->last_status_);
+    this->last_status_ = 0;
+  }
   if (!network::is_connected()) {
     ESP_LOGW(TAG, "No network — skipping push");
     return;
   }
-  std::string body = this->build_payload_();
-  ESP_LOGD(TAG, "Pushing %d entities to map", (int) this->sensors_.size());
-  this->post_(body);
-}
-
-void SensmosComponent::post_(const std::string &body) {
-#ifdef USE_ESP_IDF
-  esp_http_client_config_t cfg = {};
-  cfg.url = INGEST_URL;
-  cfg.method = HTTP_METHOD_POST;
-  cfg.timeout_ms = 6000;
-  cfg.crt_bundle_attach = esp_crt_bundle_attach;
-  esp_http_client_handle_t client = esp_http_client_init(&cfg);
-  esp_http_client_set_header(client, "Content-Type", "application/json");
-  esp_http_client_set_post_field(client, body.c_str(), body.size());
-  esp_err_t err = esp_http_client_perform(client);
-  if (err == ESP_OK) {
-    ESP_LOGD(TAG, "Ingest HTTP %d", esp_http_client_get_status_code(client));
-  } else {
-    ESP_LOGW(TAG, "Ingest failed: %s", esp_err_to_name(err));
-  }
-  esp_http_client_cleanup(client);
-#elif defined(USE_ARDUINO)
-  WiFiClientSecure client;
-  client.setInsecure();  // v1: bez weryfikacji certu (dane telemetryczne, niski risk)
-  HTTPClient http;
-  if (!http.begin(client, INGEST_URL)) {
-    ESP_LOGW(TAG, "http.begin failed");
+  if (this->busy_) {
+    ESP_LOGW(TAG, "Previous push still running — skipping this cycle");
     return;
   }
-  http.setTimeout(6000);
-  http.addHeader("Content-Type", "application/json");
-  int code = http.POST((uint8_t *) body.c_str(), body.size());
-  ESP_LOGD(TAG, "Ingest HTTP %d", code);
-  http.end();
-#endif
+
+  std::string body = this->build_payload_();
+  ESP_LOGD(TAG, "Pushing %d entities to map", (int) this->sensors_.size());
+
+  this->busy_ = true;
+  auto *job = new PostJob{this, std::move(body)};
+  // osobny task: blokujący HTTPS/TLS nie zatrzymuje pętli ESPHome ani BLE
+  if (xTaskCreate(sensmos_post_task, "sensmos_post", 10240, job,
+                  tskIDLE_PRIORITY + 1, nullptr) != pdPASS) {
+    ESP_LOGW(TAG, "Failed to start push task");
+    this->busy_ = false;
+    delete job;
+  }
 }
 
 }  // namespace sensmos
