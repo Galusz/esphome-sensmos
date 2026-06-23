@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace esphome {
@@ -14,10 +15,12 @@ struct SensmosJob {
   std::string body;
 };
 
-// Kolejkuje zadanie do persistentnego workera (task tworzony raz, STATYCZNY stos → brak
-// alokacji/zwalniania dużego stosu per request → brak fragmentacji sterty, brak crashy OOM).
-// Zwraca false gdy kolejka pełna. Wołane z pętli głównej (jednowątkowo).
-bool net_submit(SensmosJob *job);
+// Kolejkuje zadanie do TRWAŁEGO workera (task tworzony RAZ, nigdy nie kasowany → brak churnu/fragmentacji).
+// stack_bytes — rozmiar stosu workera, użyty TYLKO przy pierwszej inicjalizacji (HTTP ~4 KB wystarcza,
+// HTTPS/TLS potrzebuje ~10 KB). Stos alokowany jednorazowo ze sterty → RAM zajęty tylko gdy komponent
+// używany (inaczej niż static .bss, które rezerwuje pamięć zawsze i może uwalić boot na ciasnym nodzie).
+// Zwraca false gdy worker/kolejka nie wstały albo kolejka pełna. Wołane z pętli głównej (jednowątkowo).
+bool net_submit(SensmosJob *job, uint32_t stack_bytes);
 
 }  // namespace sensmos
 }  // namespace esphome

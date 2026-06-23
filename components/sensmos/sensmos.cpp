@@ -133,8 +133,9 @@ void SensmosComponent::loop() {
   this->pending_ = false;
   this->busy_ = true;
   ESP_LOGD(TAG, "Pushing %d entities to map", (int) this->sensors_.size());
-  // do trwałego workera (statyczny stos) — bez tworzenia taska per request → bez fragmentacji
-  if (!net_submit(job)) {
+  // do trwałego workera — bez tworzenia taska per request → bez fragmentacji.
+  // HTTP nie potrzebuje wielkiego stosu (4 KB), TLS tak (10 KB) — sizujemy wg flagi.
+  if (!net_submit(job, this->insecure_ ? 4096 : 10240)) {
     this->busy_ = false;
     delete job;
   }

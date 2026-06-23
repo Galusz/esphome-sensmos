@@ -6,37 +6,34 @@
 namespace esphome {
 namespace sensmos {
 
-// Trwały worker (tworzony RAZ) ze STATYCZNYM stosem — nie ma alokacji/zwalniania stosu
-// per request, więc sterta się nie fragmentuje (to był powód crashy OOM po kilku godzinach).
-// 8 KB stosu starcza na plain HTTP i na TLS (z dynamicznym buforem mbedTLS).
-static const uint32_t STACK_WORDS = 2048;   // 2048 * 4B = 8 KB
-static StackType_t  g_stack[STACK_WORDS];
-static StaticTask_t g_tcb;
 static QueueHandle_t g_queue = nullptr;
 
+// Trwały worker (tworzony RAZ). Nie ma alokacji/zwalniania stosu per request, więc sterta się
+// nie fragmentuje (to był powód crashy OOM po kilku godzinach). Stos alokowany jednorazowo.
 static void worker(void *) {
   for (;;) {
     SensmosJob *job = nullptr;
     if (xQueueReceive(g_queue, &job, portMAX_DELAY) == pdTRUE && job != nullptr) {
       job->run(job);   // blokujące HTTP + finish()/finish_body()
-      delete job;      // mała struktura (~kilkadziesiąt B) — nie fragmentuje jak stos 6–10 KB
+      delete job;      // mała struktura — nie fragmentuje jak stos 4–10 KB
     }
   }
 }
 
-static void net_init() {
-  if (g_queue != nullptr)
-    return;
-  g_queue = xQueueCreate(3, sizeof(SensmosJob *));
-  if (g_queue != nullptr)
-    xTaskCreateStatic(worker, "sensmos_net", STACK_WORDS, nullptr,
-                      tskIDLE_PRIORITY + 1, g_stack, &g_tcb);
-}
-
-bool net_submit(SensmosJob *job) {
-  net_init();   // wołane z pętli głównej (jednowątkowo) → bezpieczna leniwa inicjalizacja
-  if (g_queue == nullptr)
-    return false;
+bool net_submit(SensmosJob *job, uint32_t stack_bytes) {
+  // leniwa, jednorazowa inicjalizacja (wołane z pętli głównej → bez wyścigu)
+  if (g_queue == nullptr) {
+    QueueHandle_t q = xQueueCreate(3, sizeof(SensmosJob *));
+    if (q == nullptr)
+      return false;
+    // ESP-IDF: usStackDepth jest w BAJTACH. Worker żyje wiecznie → jedna alokacja stosu, zero churnu.
+    if (xTaskCreate(worker, "sensmos_net", stack_bytes, nullptr,
+                    tskIDLE_PRIORITY + 1, nullptr) != pdPASS) {
+      vQueueDelete(q);
+      return false;  // brak RAM na stos teraz → spróbuje przy kolejnym submit
+    }
+    g_queue = q;  // ustaw dopiero gdy worker wstał
+  }
   return xQueueSend(g_queue, &job, 0) == pdTRUE;
 }
 

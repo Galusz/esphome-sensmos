@@ -141,8 +141,8 @@ void SensmosGetSensor::loop() {
     }
     this->pending_ = false;
     this->busy_ = true;
-    // do trwałego workera (statyczny stos) — bez tworzenia taska per request → bez fragmentacji
-    if (!net_submit(job)) {
+    // do trwałego workera — bez tworzenia taska per request → bez fragmentacji.
+    if (!net_submit(job, this->insecure_ ? 4096 : 10240)) {
       this->busy_ = false;
       delete job;
     }
